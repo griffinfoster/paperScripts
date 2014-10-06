@@ -30,7 +30,8 @@ def deprojectMatrix(lat,dec,ha):
     """Compute the inverted d-projection matrix"""
     dproj=n.matrix([[n.cos(lat)*n.cos(dec)+n.sin(lat)*n.sin(dec)*n.cos(ha), -1.*n.sin(lat)*n.sin(ha)],[n.sin(dec)*n.sin(ha),n.cos(ha)]], dtype=n.complex)    #dipole projection matrix
     stokesDproj=n.kron(dproj,dproj) #to convert a Jones to Mueller matrix compute the auto-Kronecker product
-    invDproj=n.linalg.inv(stokesDproj) #invert [(PP outer PP*)]
+    #invDproj=n.linalg.inv(stokesDproj) #invert [(PP outer PP*)]
+    invDproj=n.linalg.pinv(stokesDproj) #invert [(PP outer PP*)] using the pseudo-inverse
     invMat=invStokes*invDproj
     return invMat
 
