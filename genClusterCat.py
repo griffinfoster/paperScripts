@@ -4,6 +4,7 @@
 import numpy as np
 import cPickle as pkl
 import os,sys
+import ephem
 
 if __name__ == '__main__':
     from optparse import OptionParser
@@ -25,16 +26,39 @@ if __name__ == '__main__':
             hdrItems=lines.split('\n')[0].split(' ')
             hdrItems=hdrItems[1:]
     fh.close()
+    #New header items added: MJD, Alt, Az
+    hdrItems.extend(['MJD', 'Alt', 'Az'])
     for hid,hdrVal in enumerate(hdrItems):
         if hdrVal.startswith('RA'): raIdx=hid
         if hdrVal.startswith('DEC'): decIdx=hid
+
+    #HARDCODE: assumes a PAPER-32 SA observer
+    obs=ephem.Observer()
+    obs.lat='-30:43:17.5'
+    obs.long='21:25:41.9'
 
     nfiles=len(args)
     for fid,fn in enumerate(args):
         print 'Loading %s (%i of %i)'%(fn,fid+1,nfiles)
         gaulArr=np.loadtxt(fn, dtype='str')
-        if fid==0: paperSrcs=gaulArr
-        else: paperSrcs=np.concatenate((paperSrcs,gaulArr))
+        mjd=float(fn.split('/')[-1].split('_')[0]) #HARDCODE: this assumes a file format [MJD]_[text]
+        obs.date=ephem.date(mjd - 2415020.) #Convert Julian date to ephem date, measured from noon, Dec. 31, 1899.
+        #update the source list to include mjd, alt, az
+        #updateGaulArr=np.chararray((gaulArr.shape[0],gaulArr.shape[1]+3))
+        updateGaulArr=np.zeros((gaulArr.shape[0],gaulArr.shape[1]+3),dtype='S11')
+        for srcIdx in range(gaulArr.shape[0]):
+            #make a source to compute the Alt,Az
+            ra=float(gaulArr[srcIdx][raIdx])*np.pi/180.
+            dec=float(gaulArr[srcIdx][decIdx])*np.pi/180.
+            src=ephem.FixedBody()
+            src._ra=ra
+            src._dec=dec
+            src.compute(obs)
+            updateGaulArr[srcIdx,:-3]=gaulArr[srcIdx]
+            #insert MJD, Alt,Az into array
+            updateGaulArr[srcIdx,-3:]=[str(mjd),str(float(src.alt)),str(float(src.az))] #a bit of format jiu jistu
+        if fid==0: paperSrcs=updateGaulArr
+        else: paperSrcs=np.concatenate((paperSrcs,updateGaulArr))
 
     clusterDict={}
     clusterIdx=0
@@ -49,33 +73,34 @@ if __name__ == '__main__':
         else:
             #create a new cluster
             clusterDict[clusterIdx]={'idx':[sid]}
-            srcDict={}
+            srciDict={}
             for lbl,attr in zip(hdrItems,paperSrcs[sid]):
                 try:
-                    srcDict[lbl]=float(attr)
+                    srciDict[lbl]=float(attr)
                 except ValueError:
-                    srcDict[lbl]=attr
-            clusterDict[clusterIdx]['src%i'%sid]=srcDict
+                    srciDict[lbl]=attr
+            clusterDict[clusterIdx]['src%i'%sid]=srciDict
 
             #find all other sources that belong in that cluster and add them to it
             for jidx in range(sid+1,paperSrcs.shape[0]):
                 dist=np.sqrt(((float(paperSrcs[sid][raIdx])-float(paperSrcs[jidx][raIdx]))**2.)+((float(paperSrcs[sid][decIdx])-float(paperSrcs[jidx][decIdx]))**2.))*60.
                 if (dist < opts.radius):
                     clusterDict[clusterIdx]['idx'].append(jidx)
+                    srcjDict={}
                     for lbl,attr in zip(hdrItems,paperSrcs[jidx]):
                         try:
-                            srcDict[lbl]=float(attr)
+                            srcjDict[lbl]=float(attr)
                         except ValueError:
-                            srcDict[lbl]=attr
-                    clusterDict[clusterIdx]['src%i'%jidx]=srcDict
+                            srcjDict[lbl]=attr
+                    clusterDict[clusterIdx]['src%i'%jidx]=srcjDict
 
             clusterIdx+=1
     print 'Found %i clusters for %i sources'%(clusterIdx,paperSrcs.shape[0])
 
     #compute the average RA,DEC
     for ckey,cval in clusterDict.iteritems():
-        print ckey
-        print clusterDict[ckey].keys()
+        #print ckey
+        #print clusterDict[ckey].keys()
         raList=[]
         decList=[]
         for src in clusterDict[ckey].iterkeys():
