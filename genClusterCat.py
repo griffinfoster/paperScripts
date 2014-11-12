@@ -6,6 +6,19 @@ import cPickle as pkl
 import os,sys
 import ephem
 
+def combineSrcs(srcDict0,srcDict1):
+    """Combine two source dictionaries and return a single dictionary
+    assumes both dictionaries have the same keys"""
+    combineSrcDict={}
+    for key in srcDict0.iterkeys():
+        if key.startswith('MJD'): combineSrcDict[key]=srcDict0[key]
+        elif key.startswith('S_Code'): combineSrcDict[key]=srcDict0[key]
+        elif key in ['Total_flux','E_Total_flux','Peak_flux','E_Peak_flux']:
+            combineSrcDict[key]=srcDict0[key]+srcDict1[key]
+        else:
+            combineSrcDict[key]=np.mean([srcDict0[key],srcDict1[key]])
+    return combineSrcDict
+
 if __name__ == '__main__':
     from optparse import OptionParser
     o = OptionParser()
@@ -37,6 +50,8 @@ if __name__ == '__main__':
     obs.lat='-30:43:17.5'
     obs.long='21:25:41.9'
 
+    mjdIdx=len(hdrItems)-3 #There might be a prettier way to get this number...
+
     nfiles=len(args)
     for fid,fn in enumerate(args):
         print 'Loading %s (%i of %i)'%(fn,fid+1,nfiles)
@@ -45,7 +60,7 @@ if __name__ == '__main__':
         obs.date=ephem.date(mjd - 2415020.) #Convert Julian date to ephem date, measured from noon, Dec. 31, 1899.
         #update the source list to include mjd, alt, az
         #updateGaulArr=np.chararray((gaulArr.shape[0],gaulArr.shape[1]+3))
-        updateGaulArr=np.zeros((gaulArr.shape[0],gaulArr.shape[1]+3),dtype='S11')
+        updateGaulArr=np.zeros((gaulArr.shape[0],gaulArr.shape[1]+3),dtype='S13')
         for srcIdx in range(gaulArr.shape[0]):
             #make a source to compute the Alt,Az
             ra=float(gaulArr[srcIdx][raIdx])*np.pi/180.
@@ -85,14 +100,19 @@ if __name__ == '__main__':
             for jidx in range(sid+1,paperSrcs.shape[0]):
                 dist=np.sqrt(((float(paperSrcs[sid][raIdx])-float(paperSrcs[jidx][raIdx]))**2.)+((float(paperSrcs[sid][decIdx])-float(paperSrcs[jidx][decIdx]))**2.))*60.
                 if (dist < opts.radius):
-                    clusterDict[clusterIdx]['idx'].append(jidx)
                     srcjDict={}
                     for lbl,attr in zip(hdrItems,paperSrcs[jidx]):
                         try:
                             srcjDict[lbl]=float(attr)
                         except ValueError:
                             srcjDict[lbl]=attr
-                    clusterDict[clusterIdx]['src%i'%jidx]=srcjDict
+                    if srciDict['MJD']==srcjDict['MJD']: #if sources have the same MJD, then they should be treated as a single source
+                        print 'Combining sources into one for same Cluster, same MJD (ids: %i, %i)'%(sid,jidx)
+                        bb=combineSrcs(clusterDict[clusterIdx]['src%i'%sid],srcjDict)
+                        clusterDict[clusterIdx]['src%i'%sid]=combineSrcs(clusterDict[clusterIdx]['src%i'%sid],srcjDict)
+                    else:
+                        clusterDict[clusterIdx]['idx'].append(jidx)
+                        clusterDict[clusterIdx]['src%i'%jidx]=srcjDict
 
             clusterIdx+=1
     print 'Found %i clusters for %i sources'%(clusterIdx,paperSrcs.shape[0])
