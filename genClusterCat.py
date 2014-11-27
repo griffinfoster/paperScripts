@@ -6,17 +6,17 @@ import cPickle as pkl
 import os,sys
 import ephem
 
-def combineSrcs(srcDict0,srcDict1):
-    """Combine two source dictionaries and return a single dictionary
-    assumes both dictionaries have the same keys"""
+def combineSrcs(srcDictList):
+    """Combine a list of source dictionaries into a single dictionary, assumes all sources have the same keys"""
     combineSrcDict={}
-    for key in srcDict0.iterkeys():
-        if key.startswith('MJD'): combineSrcDict[key]=srcDict0[key]
-        elif key.startswith('S_Code'): combineSrcDict[key]=srcDict0[key]
+    nsrcs=len(srcDictList)
+    for key in srcDictList[0].iterkeys():
+        if key.startswith('MJD'): combineSrcDict[key]=srcDictList[0][key]
+        elif key.startswith('S_Code'): combineSrcDict[key]=srcDictList[0][key]
         elif key in ['Total_flux','E_Total_flux','Peak_flux','E_Peak_flux']:
-            combineSrcDict[key]=srcDict0[key]+srcDict1[key]
+            combineSrcDict[key]=np.sum([srcDictList[idx][key] for idx in range(nsrcs)])
         else:
-            combineSrcDict[key]=np.mean([srcDict0[key],srcDict1[key]])
+            combineSrcDict[key]=np.mean([srcDictList[idx][key] for idx in range(nsrcs)])
     return combineSrcDict
 
 if __name__ == '__main__':
@@ -106,16 +106,43 @@ if __name__ == '__main__':
                             srcjDict[lbl]=float(attr)
                         except ValueError:
                             srcjDict[lbl]=attr
-                    if srciDict['MJD']==srcjDict['MJD']: #if sources have the same MJD, then they should be treated as a single source
-                        print 'Combining sources into one for same Cluster, same MJD (ids: %i, %i)'%(sid,jidx)
-                        bb=combineSrcs(clusterDict[clusterIdx]['src%i'%sid],srcjDict)
-                        clusterDict[clusterIdx]['src%i'%sid]=combineSrcs(clusterDict[clusterIdx]['src%i'%sid],srcjDict)
-                    else:
-                        clusterDict[clusterIdx]['idx'].append(jidx)
-                        clusterDict[clusterIdx]['src%i'%jidx]=srcjDict
+                    clusterDict[clusterIdx]['idx'].append(jidx)
+                    clusterDict[clusterIdx]['src%i'%jidx]=srcjDict
 
             clusterIdx+=1
-    print 'Found %i clusters for %i sources'%(clusterIdx,paperSrcs.shape[0])
+
+    #go through each cluster an combine sources with the same MJD
+    srcCnt=0
+    for ckey in clusterDict.iterkeys():
+        mjdList=[]
+        idxList=[]
+        srcsDict={}
+        for skey in clusterDict[ckey].iterkeys():
+            if skey.startswith('src'):
+                mjdList.append(clusterDict[ckey][skey]['MJD'])
+        if len(mjdList)==1: #ignore single source clusters
+            srcCnt+=1
+            continue
+        uniqMJDList=np.unique(mjdList)
+        for mjd in uniqMJDList:
+            combSrcs=[]
+            for skey in clusterDict[ckey].iterkeys():
+                if skey.startswith('src') and clusterDict[ckey][skey]['MJD']==mjd:
+                    combSrcs.append(skey)
+            if len(combSrcs)==1:
+                srcsDict[combSrcs[0]]=clusterDict[ckey][combSrcs[0]]
+                idxList.append(int(combSrcs[0].split('src')[-1]))
+            else:
+                #combine sources into a single source
+                combineSrcDict=combineSrcs([clusterDict[ckey][cSrcId] for cSrcId in combSrcs])
+                srcsDict[combSrcs[0]]=combineSrcDict
+                idxList.append(int(combSrcs[0].split('src')[-1]))
+            srcCnt+=1
+        srcsDict['idx']=idxList
+        #replace ckey Dict with srcsDict
+        clusterDict[ckey]=srcsDict
+
+    print 'Found %i clusters for %i sources (%i sources after combining)'%(clusterIdx,paperSrcs.shape[0],srcCnt)
 
     #compute the average RA,DEC
     for ckey,cval in clusterDict.iteritems():

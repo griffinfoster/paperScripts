@@ -51,6 +51,8 @@ if __name__ == '__main__':
     outIm[:,:,2]=.5*(im[:,:,2]+im[:,:,1]).real #U
     outIm[:,:,3]=.5*(im[:,:,2]-im[:,:,1]).imag #V
 
+    outIm=n.transpose(outIm,(2,3,0,1)) #put the ouput image back into the correct order
+
     #write outIm to new FITS file
     path,srcFn=os.path.split(os.path.realpath(opts.xximg))
     dstFn=opts.outfn

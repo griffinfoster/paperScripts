@@ -63,6 +63,7 @@ def genInterpBeam(fekoX,fekoY,fitsfn,invert=False):
     
     #drop beam points near zenith as this can create artefacts
     deltaTheta=(np.pi/2.)/100. #delta of theta away from pi/2 to ignore
+    #deltaTheta=(np.pi/2.)/25. #delta of theta away from pi/2 to ignore
     thetaIdx=np.argwhere(theta<(np.pi/2.-deltaTheta))
     theta0=theta[thetaIdx].flatten()
     phi0=phi[thetaIdx].flatten()
@@ -138,9 +139,10 @@ def genInterpBeam(fekoX,fekoY,fitsfn,invert=False):
             #print fekoCmplxBeams.shape
             #print fekoFreqs
 
+            #TODO:better frequency interpolation
             #freq interpolate: weighted average of freq planes, based on absolute distance from centre freq
             print 'Frequency Interpolation'
-            interpSamples=10 #number of interpolated values to compute across the channel band
+            interpSamples=5*len(fekoFreqs) #number of interpolated values to compute across the channel band, this will approximate the avergae across that band
             interpFreqs=np.linspace(sbStart,sbStop,interpSamples,endpoint=True)
             #print interpFreqs
             freqInterpBeam=np.zeros((fekoCmplxBeams.shape[1]))
@@ -155,25 +157,18 @@ def genInterpBeam(fekoX,fekoY,fitsfn,invert=False):
 
         for pid,plabel in enumerate(polID):
             print 'Spatial Interpolation',plabel
-            #interpFunc=interpolate.interp2d(phi, theta, freqInterpBeam, kind='linear',bounds_error=False, fill_value=np.nan)
-            #interpFunc=interpolate.interp2d(phi0, theta0, freqInterpBeam0, kind='linear',bounds_error=False, fill_value=np.nan)
-            interpFunc=interpolate.interp2d(phi0, theta0, freqInterpBeams[plabel], kind='linear',bounds_error=False, fill_value=np.nan)
-            #TODO:this is a very slow loop
-            for ll in range(im.shape[axisDict['DEC']]):
-                for mm in range(im.shape[axisDict['RA']]):
-                    if np.isnan(imPhi[ll,mm]) or np.isnan(imTheta[ll,mm]): interpBeamIm[pid,fid,mm,ll]=np.nan
-                    else: interpBeamIm[pid,fid,mm,ll]=interpFunc(imPhi[ll,mm],imTheta[ll,mm])
+            interpBeamIm0=interpolate.griddata(np.column_stack((phi0, theta0)), freqInterpBeams[plabel],np.column_stack((imPhi.flatten(),imTheta.flatten())),method='linear')
+            interpBeamIm[pid,fid]=interpBeamIm0.reshape(imPhi.shape)
 
         if invert:
             print 'Inverting frequency-interpolated beam'
             cplxBeamIm=np.array([ [interpBeamIm[0,fid],interpBeamIm[1,fid]+1j*interpBeamIm[2,fid]], [interpBeamIm[3,fid]+1j*interpBeamIm[4,fid],interpBeamIm[5,fid]]])
             invCplxBeam=np.zeros_like(cplxBeamIm)
-            #slow loop
+            #TODO:slow loop
             for ll in range(im.shape[axisDict['DEC']]):
                 for mm in range(im.shape[axisDict['RA']]):
                     if np.isnan(cplxBeamIm[:,:,ll,mm]).any(): invCplxBeam[:,:,ll,mm]=np.nan
                     else: invCplxBeam[:,:,ll,mm]=np.linalg.pinv(np.matrix(cplxBeamIm[:,:,ll,mm])) #pseudo-inverse
-                    #else: invCplxBeam[:,:,ll,mm]=np.linalg.inv(np.matrix(cplxBeamIm[:,:,ll,mm]))
             interpBeamIm[0,fid]=invCplxBeam[0,0].real
             interpBeamIm[1,fid]=invCplxBeam[0,1].real
             interpBeamIm[2,fid]=invCplxBeam[0,1].imag

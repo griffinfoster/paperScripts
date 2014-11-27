@@ -18,6 +18,8 @@ if __name__ == '__main__':
         help='Template fits file')
     o.add_option('-o','--out',dest='outfn',default=None,
         help='Output FITS filename, default: inpuy NPY filename with .fits extension')
+    o.add_option('-T','--transpose',dest='transpose',action='store_true',
+        help='Transpose the image cube')
     opts, args = o.parse_args(sys.argv[1:])
 
     npyFn=args[0]
@@ -38,7 +40,12 @@ if __name__ == '__main__':
     fh=pf.open(os.path.join(path,dstFn),mode='update')
     #hdr=fh[0].header
     #hdr.update('CRVAL4',1)
-    fh[0].data=imCube
+    if opts.transpose:
+        imCube=np.transpose(imCube,(2,3,0,1))
+        print 'NPY shape:', imCube.shape
+    if imCube.dtype is np.dtype('complex'):
+        fh[0].data=np.abs(imCube)
+    else: fh[0].data=imCube
     fh.flush()
     fh.close()
 
