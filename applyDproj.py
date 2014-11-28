@@ -73,7 +73,7 @@ if __name__ == '__main__':
     outIm[:,:,0]=cplxIm[:,:,0].real #I
     outIm[:,:,1]=cplxIm[:,:,1].real #Q
     outIm[:,:,2]=cplxIm[:,:,2].real #U
-    outIm[:,:,3]=cplxIm[:,:,3].imag #V
+    outIm[:,:,3]=cplxIm[:,:,3].real #V: take the real component because the Stokes conversion 1j*1j=-1
 
     outIm=n.transpose(outIm,(2,3,0,1)) #put back into the FITS shape
 
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     fh=pf.open(os.path.join(path,dstFn),mode='update')
     hdr=fh[0].header
     hdr.update('CRVAL4',1) #make first Stokes ID Stokes I
-    hdr.update('CRVAL4',4) #fix header to 4 Stokes values
+    #hdr.update('CRVAL4',4) #fix header to 4 Stokes values
     fh[0].data=outIm
     fh.flush()
     fh.close()
