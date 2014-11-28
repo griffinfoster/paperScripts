@@ -15,7 +15,8 @@ import os.path
 import glob
 import shutil
 
-SCRIPTS_DIR='/home/foster/PAPER/pipelines/paper32imaging/scripts'
+#SCRIPTS_DIR='/home/foster/PAPER/pipelines/paper32imaging/scripts'
+SCRIPTS_DIR='/home/foster/sw/paperScripts'
 
 # ELWOOD specific settings
 #mqt.MULTITHREAD = 4
@@ -31,17 +32,24 @@ x.sh('export LC_NUMERIC=en_GB.utf8')
 ## or else go with the default list below
 #v.MS = 'zen.2455819.55853.uvcRREM.MS'
 ## default list of measurement sets for e.g. runall()
-v.MS_List = glob.glob('/home/foster/PAPER/pipelines/paper32imaging/data/zen.*.uvcRREM.MS')
+#v.MS_List = glob.glob('/home/foster/PAPER/pipelines/paper32imaging/data/zen.*.uvcRREM.MS')
+v.MS_List = glob.glob('/home/foster/PAPER/pipelines/paper32imaging/data2/zen.2455819.*.uvcRREM.MS')
+#v.MS_List = glob.glob('/home/foster/PAPER/pipelines/paper32imaging/data2/zen.2455819.4[0-5]*.uvcRREM.MS')
 
 ms.DDID = 0
 ms.FIELD = 0
 
 ## destination directory for plots, images, etc.
-v.DESTDIR_Template = '${OUTDIR>/}output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}swift-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-sun-output-plots${-stage<STAGE}'
+v.DESTDIR_Template = '${OUTDIR>/}phase-sun-output-plots${-stage<STAGE}'
 ## base filename for these files
 v.OUTFILE_Template = '${DESTDIR>/}${MS:BASE}${_s<STEP}${_<LABEL}'
 
-lsm.PYBDSM_POLARIZED = True 
+lsm.PYBDSM_POLARIZED = False 
 
 ## when running stefcal be verbose
 stefcal.STEFCAL_TDLOPTS = "stefcal_verbose=3"
@@ -102,16 +110,58 @@ ms.CHANRANGE=startChan,endChan
 #ms.IFRS = "S83,-5*"
 
 ###################################################################################################
-#selfcal/imaging/source-finding pipeline function
+#swift dirty images
+def swift_image_pipeline(goto_step=0.):
 
-def cal_pipeline(goto_step=0.):
-    #TODO:rfi flagging
+    if not os.path.isdir(v.DESTDIR):
+        os.makedirs(v.DESTDIR)
+
+    ##copy data to corrected data column to run clean
+    #if goto_step <= 0:
+    #    v.STEP=1
+    #    info("########## copying data to corrected data column step %i"%v.STEP)
+    #    pper("MS",copy_data_to_corrected_data)
+
+    #run a basic clean
+    if goto_step <= 1:
+        v.STEP=1
+        info("########## making initial clean image step %i"%v.STEP)
+        wscleanDict={
+            'name':'wsclean',
+            'datacolumn':'CORRECTED_DATA',
+            'size': '1024 1024',
+            #'scale': 330./3600.,
+            'scale': 0.11,
+            'niter': 250,
+            'threshold': 1.,
+            'pol': 'I',
+            #'weight': 'natural',
+            'weight': 'briggs 0.0',
+            'nwlayers':32,
+            'channelrange': '%i %i'%(startChan,endChan),
+            'channelsout': 1}
+        for msFile in sorted(v.MS_List):
+            msBase=msFile.split('/')[-1].split('.MS')[0] 
+            wscleanDict['name']=msBase+'_s%i'%v.STEP
+            run_wsclean(msFile,wscleanDict)
+        fitsfiles=glob.glob('*.fits')
+        for ff in fitsfiles: shutil.move(ff,v.DESTDIR)
+
+
+###################################################################################################
+#selfcal/imaging/source-finding pipeline function
+def selfcal_loop_pipeline(goto_step=0.):
 
     if not os.path.isdir(v.DESTDIR):
         os.makedirs(v.DESTDIR)
 
     #copy data to corrected data column to run clean
-    if goto_step <= 0:
+    if goto_step <= 0.:
+        v.STEP=1
+        info("########## adding columns %i"%v.STEP)
+        for msFile in sorted(v.MS_List):pyrap.tables.addImagingColumns(msFile)
+
+    if goto_step <= 0.5:
         v.STEP=1
         info("########## copying data to corrected data column step %i"%v.STEP)
         pper("MS",copy_data_to_corrected_data)
@@ -124,7 +174,8 @@ def cal_pipeline(goto_step=0.):
             'name':'wsclean',
             'datacolumn':'CORRECTED_DATA',
             'size': '1024 1024',
-            'scale': 330./3600.,
+            #'scale': 330./3600.,
+            'scale': 0.11,
             'niter': 250,
             'threshold': 1.,
             'pol': 'I',
@@ -157,7 +208,8 @@ def cal_pipeline(goto_step=0.):
             'name':'wsclean',
             'datacolumn':'CORRECTED_DATA',
             'size': '1024 1024',
-            'scale': 330./3600.,
+            #'scale': 330./3600.,
+            'scale': 0.11,
             'niter': 500,
             'threshold': 1.,
             'pol': 'I',
@@ -197,7 +249,8 @@ def cal_pipeline(goto_step=0.):
             'name':'wsclean',
             'datacolumn':'CORRECTED_DATA',
             'size': '1024 1024',
-            'scale': 330./3600.,
+            #'scale': 330./3600.,
+            'scale': 0.11,
             'niter': 1000,
             'threshold': 1.,
             'pol': 'I',
@@ -238,7 +291,8 @@ def cal_pipeline(goto_step=0.):
             'name':'wsclean',
             'datacolumn':'CORRECTED_DATA',
             'size': '1024 1024',
-            'scale': 330./3600.,
+            #'scale': 330./3600.,
+            'scale': 0.11,
             'niter': 1000,
             'threshold': 1.,
             'pol': 'xx,xy,yx,yy',
@@ -268,11 +322,10 @@ def cal_pipeline(goto_step=0.):
         for gf in gaulfiles: shutil.move(gf,v.DESTDIR)
 
 ###################################################################################################
-# HEALPIX skymap pipeline function
+# Image domain corrections pipeline function
+def image_domain_corrections_pipeline(goto_step=0):
 
-def map_pipeline(goto_step=2):
-
-    useStep=4   #use this step ID for selecting FITS files
+    useStep=3   #use this step ID for selecting FITS files
     #generate the dproj matrix based on an image template
     if goto_step <= 1.:
         v.STEP=3
@@ -313,64 +366,286 @@ def map_pipeline(goto_step=2):
             fitsfiles=sorted(glob.glob(v.DESTDIR+gtStr))
             hdulist=pyfits.open(fitsfiles[0])
             hdr=hdulist[0].header
-            beamStr='paper32_%.2fMHz_bw%04.1fMHz_%iarcsec_%ipx.fits'%(hdr['CRVAL3']*10e-7,hdr['CDELT3']*10e-7,int(abs(hdr['CDELT1']*3600.)),int(hdr['NAXIS1']))
+            beamStr='paper32_%.2fMHz_bw%04.1fMHz_%iarcsec_%ipx.beam.npy'%(hdr['CRVAL3']*10e-7,hdr['CDELT3']*10e-7,int(abs(hdr['CDELT1']*3600.)),int(hdr['NAXIS1']))
+            invBeamStr='paper32_%.2fMHz_bw%04.1fMHz_%iarcsec_%ipx.invert.beam.npy'%(hdr['CRVAL3']*10e-7,hdr['CDELT3']*10e-7,int(abs(hdr['CDELT1']*3600.)),int(hdr['NAXIS1']))
             hdulist.close()
+            info('########## Using %s for beam template'%invBeamStr)
+            if not os.path.isfile(v.DESTDIR+'/'+invBeamStr):
+                info("########## generating interpolated beam from template FITS, outputing %s step %i"%(v.DESTDIR+'/'+beamStr,v.STEP))
+                x.sh('%s/genInterpBeam.py -i --xpol=%s --ypol=%s --ofn=%s %s'%(SCRIPTS_DIR,fekoXpol,fekoYpol,invBeamStr,fitsfiles[0]))
             info('########## Using %s for beam template'%beamStr)
             if not os.path.isfile(v.DESTDIR+'/'+beamStr):
                 info("########## generating interpolated beam from template FITS, outputing %s step %i"%(v.DESTDIR+'/'+beamStr,v.STEP))
-                x.sh('%s/genInterpBeam.py -i --xpol=%s --ypol=%s --ofn=%s %s'%(SCRIPTS_DIR,fekoXpol,fekoYpol,beamStr,fitsfiles[0]))
+                x.sh('%s/genInterpBeam.py --xpol=%s --ypol=%s --ofn=%s %s'%(SCRIPTS_DIR,fekoXpol,fekoYpol,beamStr,fitsfiles[0]))
 
     #apply inverted beam to Stokes image
     if goto_step <= 2.5:
         v.STEP=4
         info("########## applying beam correction step %i"%v.STEP)
-        ##fitsfiles=glob.glob(v.DESTDIR+'/*s%i.restored.fits'%(useStep))
-        #fitsXX=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XX-image.fits'%(useStep)))
-        #fitsYY=sorted(glob.glob(v.DESTDIR+'/*s%i-*-YY-image.fits'%(useStep)))
-        #fitsXYr=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XY-image.fits'%(useStep)))
-        #fitsXYi=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XYi-image.fits'%(useStep)))
-        #for fxx,fyy,fxyr,fxyi in zip(fitsXX,fitsYY,fitsXYr,fitsXYi):
-        #    ofn=fxx.split('/')[-1]
-        #    ofn=ofn.split('XX')[0]+'stokes.fits'
-        #    info("################ D-Projection: %s"%(ofn))
-        #    x.sh('%s/applyDproj.py -d %s --xx=%s --yy=%s --xyr=%s --xyi=%s -o %s'%(SCRIPTS_DIR,dprojStr+'.npy',fxx,fyy,fxyr,fxyi,ofn))
+        fitsfiles=sorted(glob.glob(v.DESTDIR+'/*-stokes.fits'))
+        for ff in fitsfiles:
+            hdulist=pyfits.open(ff)
+            hdr=hdulist[0].header
+            beamStr='paper32_%.2fMHz_bw%04.1fMHz_%iarcsec_%ipx.invert.beam.npy'%(hdr['CRVAL3']*10e-7,hdr['CDELT3']*10e-7,int(abs(hdr['CDELT1']*3600.)),int(hdr['NAXIS1']))
+            hdulist.close()
+            x.sh('%s/applyInterpBeam.py -b %s %s'%(SCRIPTS_DIR,v.DESTDIR+'/'+beamStr,ff))
 
-    #apply inverted beam
-    #make multifreq fits file
-    #run pybdsm on fits file to produce final sky model
-    #convert image to healpix
-    #sum up maps
+    
+    #absolute calibration
+    if goto_step <= 3.:
+        v.STEP=5
+        info("########## Correcting for Absolute calibration %i"%v.STEP)
+        fitsfiles=sorted(glob.glob(v.DESTDIR+'/*-stokes.beam.fits'))
+        for ff in fitsfiles:
+            x.sh('%s/setAbsFlux.py %s'%(SCRIPTS_DIR,ff))
 
-#    #TODO:fits files are per freq, per complex polarization, should I run this in the skymap pipeline?
-#    #derive an final sky model from the clean'd image
-#    if goto_step <= 4.5:
-#        v.STEP=4
-#        fitsfiles=glob.glob(v.DESTDIR+'/*_s4-image.fits')
-#        for ff in sorted(fitsfiles):
-#            olsm=ff.split('-image.fits')[0]+'.lsm'
-#            lsm.pybdsm_search(image=ff,output=olsm,thresh_pix=12,thresh_isl=5)
-#            lsm.tigger_convert(olsm)
-#
-#    #healpix skymap
-#    if goto_step <= 2.:
-#        v.STEP=4
-#        info("########## generating healpix maps step %i"%v.STEP)
-#        #fitsfiles=glob.glob(v.DESTDIR+'/*.dirty.dproj.fits')
-#        fitsfiles=glob.glob(v.DESTDIR+'/*s%s.restored.dproj.fits'%(useStep))
-#        for ff in fitsfiles:
-#            info("################ %s"%ff)
-#            for sid in ['I','Q','U','V']:
-#                hpxfn=ff.split('.fits')[0]+'.s%s.hpx'%sid
-#                #nside: 512 -> 7 arcmin res
-#                #nside: 1024 -> 3.5 arcmin res
-#                x.sh('/home/foster/PAPER/scripts/mk_map_mod.py %s -n --min_alt=30 -S %s --nside=512 -m %s'%(ff,sid,hpxfn))
-#
-#    #summed healpix map
-#    if goto_step <= 3.:
-#        v.STEP=5
-#        for sid in ['I','Q','U','V']:
-#            #x.sh('/home/foster/PAPER/scripts/save_map.py -s %s %s'%(v.DESTDIR+'/paper_32_combined_%s.hpx',v.DESTDIR+'/*.dirty.dproj.s%s.hpx')%(sid,sid))
-#            x.sh('/home/foster/PAPER/scripts/save_map.py -s %s %s'%(v.DESTDIR+'/paper_32_combined_%s_s%i.hpx'%(sid,useStep),v.DESTDIR+'/*s%i.restored.dproj.s%s.hpx')%(useStep,sid))
+    #make fits freqeuncy image cube
+    if goto_step <= 4.:
+        v.STEP=6
+        info("########## generating multi-frequency FITS files step %i"%v.STEP)
+        mfitsfiles=sorted(glob.glob(v.DESTDIR+'/*0000-stokes.beam.abs.fits'))
+        for mff in mfitsfiles:
+            mfreqList=mff.split('-0000-')
+            mfreqFn=mfreqList[0]+'.mfreq.'+mfreqList[1]
+            x.sh('cp %s %s'%(mff,mfreqFn)) #copy MFS file to .mfreq.fits
+            hdulist=pyfits.open(mfreqFn,mode='update') #open .mfreq.fits
+            im=hdulist[0].data
+            mfreqIm=np.zeros((im.shape[0],nsubbands,im.shape[2],im.shape[3]))
+            for sbid in range(nsubbands):
+                ff=mff.split('-0000-')[0]+'-%04i-'%sbid+'stokes.beam.abs.fits'
+                subhdulist=pyfits.open(ff)
+                imdata=subhdulist[0].data
+                mfreqIm[:,sbid]=subhdulist[0].data[:,0]
+                subhdulist.close()
+            hdr=hdulist[0].header
+            hdulist[0].data=mfreqIm
+            hdulist.flush()
+            hdulist.close()
+
+    #TODO: cleanup intermediate files
+
+###################################################################################################
+# HEALPIX skymap pipeline function
+def map_pipeline(goto_step=0):
+    #postFixStr='-stokes.beam'
+    postFixStr='-stokes.beam.abs'
+
+    #convert FITS to healpix
+    if goto_step <= 1.:
+        v.STEP=7
+        info("########## generating healpix maps step %i"%v.STEP)
+        fitsfiles=sorted(glob.glob(v.DESTDIR+'/*%s.fits'%postFixStr))
+        for ff in fitsfiles:
+            info("################ %s"%ff)
+            for sid in ['I','Q','U','V']:
+                hpxfn=ff.split('.fits')[0]+'.s%s.hpx'%sid
+                #nside: 512 -> 7 arcmin res
+                #nside: 1024 -> 3.5 arcmin res
+                x.sh('%s/mk_map_mod.py %s -n --min_alt=30 -S %s --nside=512 -m %s'%(SCRIPTS_DIR,ff,sid,hpxfn))
+
+    #summed healpix map
+    if goto_step <= 2.:
+        v.STEP=8
+        for sid in ['I','Q','U','V']:
+            outHpxFn=v.DESTDIR+'/skymap_paper32_cMFS_s%s.hpx'%(sid)
+            x.sh('%s/save_map.py -s %s %s'%(SCRIPTS_DIR,outHpxFn,v.DESTDIR+'/*MFS%s.s%s.hpx'%(postFixStr,sid)))
+            for sbid in range(nsubbands):
+                outHpxFn=v.DESTDIR+'/skymap_paper32_c%04i_s%s.hpx'%(sbid,sid)
+                x.sh('%s/save_map.py -s %s %s'%(SCRIPTS_DIR,outHpxFn,v.DESTDIR+'/*-%04i%s.s%s.hpx'%(sbid,postFixStr,sid)))
+
+    #TODO: cleanup intermediate files
+
+###################################################################################################
+#Generate images from CORRECTED DATA
+def gen_images_from_corrected_data(goto_step=1.):
+    useStep=1
+    #generate multi-frequency, complex images
+    if goto_step <= 1.:
+        v.STEP=1
+        wscleanDict={
+            'name':'wsclean',
+            'datacolumn':'CORRECTED_DATA',
+            'size': '1024 1024',
+            #'scale': 330./3600.,
+            'scale': 0.11,
+            'niter': 1000,
+            'threshold': 1.,
+            'pol': 'xx,xy,yx,yy',
+            #'weight': 'natural',
+            'weight': 'briggs 0.0',
+            'nwlayers':32,
+            'channelrange': '%i %i'%(startChan,endChan),
+            'channelsout': nsubbands,
+            'joinpolarizations': None}
+        for msFile in sorted(v.MS_List):
+            x.sh('export LC_NUMERIC=en_GB.utf8')
+            msBase=msFile.split('/')[-1].split('.MS')[0] 
+            wscleanDict['name']=msBase+'_s%i'%v.STEP
+            run_wsclean(msFile,wscleanDict)
+        fitsfiles=glob.glob('*.fits')
+        for ff in fitsfiles: shutil.move(ff,v.DESTDIR)
+
+    #convert complex images to Stokes
+    if goto_step <= 2.:
+        v.STEP=2
+        info("########## convertinf to Stokes step %i"%v.STEP)
+        fitsXX=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XX-image.fits'%(useStep)))
+        fitsYY=sorted(glob.glob(v.DESTDIR+'/*s%i-*-YY-image.fits'%(useStep)))
+        fitsXYr=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XY-image.fits'%(useStep)))
+        fitsXYi=sorted(glob.glob(v.DESTDIR+'/*s%i-*-XYi-image.fits'%(useStep)))
+        for fxx,fyy,fxyr,fxyi in zip(fitsXX,fitsYY,fitsXYr,fitsXYi):
+            ofn=fxx.split('/')[-1]
+            ofn=ofn.split('XX')[0]+'stokes.fits'
+            #x.sh('%s/applyDproj.py -d %s --xx=%s --yy=%s --xyr=%s --xyi=%s -o %s'%(SCRIPTS_DIR,dprojStr+'.npy',fxx,fyy,fxyr,fxyi,ofn))
+            x.sh('/home/foster/sw/paperScripts/convertStokes.py --xx=%s --yy=%s --xyr=%s --xyi=%s -o %s'%(fxx,fyy,fxyr,fxyi,ofn))
+
+###################################################################################################
+#Self-cal from phase-only corrected gain, and sun removal
+def phase_precal_selfcal_pipeline(goto_step=0.):
+    useStep=1
+    skipCalMSlist=[ 'zen.2455819.25927.uvcRREM',
+                    'zen.2455819.27319.uvcRREM',
+                    'zen.2455819.32190.uvcRREM',
+                    'zen.2455819.34278.uvcRREM',
+                    'zen.2455819.34974.uvcRREM',
+                    'zen.2455819.38454.uvcRREM',
+                    'zen.2455819.40542.uvcRREM',
+                    'zen.2455819.41238.uvcRREM',
+                    'zen.2455819.41934.uvcRREM',
+                    'zen.2455819.42630.uvcRREM',
+                    'zen.2455819.73947.uvcRREM',
+                    'zen.2455819.74643.uvcRREM',
+                    'zen.2455819.75339.uvcRREM',
+                    'zen.2455819.76035.uvcRREM',
+                    'zen.2455819.78819.uvcRREM',
+                    'zen.2455819.79515.uvcRREM',
+                    'zen.2455819.80211.uvcRREM',
+                    'zen.2455819.80906.uvcRREM'] #MS files to skip calibration on
+    skipCleanMSlist=['zen.2455819.79515.uvcRREM'] #problematic MS files when imaging multi-freq
+
+    if not os.path.isdir(v.DESTDIR):
+        os.makedirs(v.DESTDIR)
+
+    if goto_step <= 0.:
+        v.STEP=1
+        info("########## adding columns %i"%v.STEP)
+        for msFile in sorted(v.MS_List):pyrap.tables.addImagingColumns(msFile)
+
+    #copy data to corrected data column to run clean
+    if goto_step <= 0.5:
+        v.STEP=1
+        info("########## copying data to corrected data column step %i"%v.STEP)
+        pper("MS",copy_data_to_corrected_data)
+
+    #run a basic clean to perform source finding on
+    if goto_step <= 1:
+        v.STEP=1
+        info("########## making initial clean image step %i"%v.STEP)
+        wscleanDict={
+            'name':'wsclean',
+            'datacolumn':'CORRECTED_DATA',
+            'size': '1024 1024',
+            #'scale': 330./3600.,
+            'scale': 0.11,
+            'niter': 250,
+            'threshold': 100.,
+            'pol': 'I',
+            #'weight': 'natural',
+            'weight': 'briggs 0.0',
+            'nwlayers':32,
+            'channelrange': '%i %i'%(startChan,endChan),
+            'channelsout': 1}
+        for msFile in sorted(v.MS_List):
+            msBase=msFile.split('/')[-1].split('.MS')[0] 
+            wscleanDict['name']=msBase+'_s%i'%v.STEP
+            run_wsclean(msFile,wscleanDict)
+        fitsfiles=glob.glob('*.fits')
+        for ff in fitsfiles: shutil.move(ff,v.DESTDIR)
+
+    #derive a shallow depth sky model from the clean'd image
+    if goto_step <= 1.5:
+        v.STEP=1
+        fitsfiles=glob.glob(v.DESTDIR+'/*_s1-image.fits')
+        for ff in sorted(fitsfiles):
+            olsm=ff.split('-image.fits')[0]+'.lsm'
+            lsm.pybdsm_search(image=ff,output=olsm,thresh_pix=20,thresh_isl=15)
+            lsm.tigger_convert(olsm)
+
+    #run stefcal using the sky model, produce a Stokes I image for source finding
+    if goto_step <= 2:
+        v.STEP=2
+        lsm0files=glob.glob(v.DESTDIR+'/*_s1.lsm.html')
+        wscleanDict={
+            'name':'wsclean',
+            'datacolumn':'CORRECTED_DATA',
+            'size': '1024 1024',
+            #'scale': 330./3600.,
+            'scale': 0.11,
+            'niter': 250,
+            'threshold': 100.,
+            'pol': 'I',
+            #'weight': 'natural',
+            'weight': 'briggs 0.0',
+            'nwlayers':32,
+            'channelrange': '%i %i'%(startChan,endChan),
+            'channelsout': 1}
+        for msFile in sorted(v.MS_List):
+            msBase=msFile.split('/')[-1].split('.MS')[0] 
+            if msBase in skipCalMSlist:
+                info('Skipping this MS file')
+            else:
+                x.sh('export LC_NUMERIC=en_GB.utf8')
+                lsm0=filter(lambda x: x.split('/')[-1].startswith(msBase),lsm0files)[0]
+                v.LSM=lsm0
+                v.MS=msFile
+                stefcal.STEFCAL_STEP_INCR = 0 # we set the step counter explicitly
+                info("########## initial calibration of %s using sky model %s step %i"%(msFile,lsm0,v.STEP))
+                stefcal.stefcal(output='CORR_DATA',dirty=False,restore=False,section='calico-stefcal')
+            info("########## making clean image step %i"%v.STEP)
+            wscleanDict['name']=msBase+'_s%i'%v.STEP
+            run_wsclean(msFile,wscleanDict)
+        fitsfiles=glob.glob('*.fits')
+        for ff in fitsfiles: shutil.move(ff,v.DESTDIR)
+
+    #derive a deeper depth sky model from the clean'd image
+    if goto_step <= 2.5:
+        v.STEP=2
+        fitsfiles=glob.glob(v.DESTDIR+'/*_s2-image.fits')
+        for ff in sorted(fitsfiles):
+            olsm=ff.split('-image.fits')[0]+'.lsm'
+            lsm.pybdsm_search(image=ff,output=olsm,thresh_pix=10,thresh_isl=7)
+            lsm.tigger_convert(olsm)
+
+    #generate multi-frequency, complex images for image domain corrections
+    if goto_step <= 3:
+        v.STEP=3
+        wscleanDict={
+            'name':'wsclean',
+            'datacolumn':'CORRECTED_DATA',
+            'size': '1024 1024',
+            #'scale': 330./3600.,
+            'scale': 0.11,
+            'niter': 1000,
+            'threshold': 100.,
+            'pol': 'xx,xy,yx,yy',
+            #'weight': 'natural',
+            'weight': 'briggs 0.0',
+            'nwlayers':32,
+            'channelrange': '%i %i'%(startChan,endChan),
+            'channelsout': nsubbands,
+            'joinpolarizations': None}
+        for msFile in sorted(v.MS_List):
+            x.sh('export LC_NUMERIC=en_GB.utf8')
+            msBase=msFile.split('/')[-1].split('.MS')[0] 
+            if msBase in skipCleanMSlist: wscleanDict['niter']=1
+            else: wscleanDict['niter']=1000
+            info("########## making clean image step %i"%v.STEP)
+            wscleanDict['name']=msBase+'_s%i'%v.STEP
+            run_wsclean(msFile,wscleanDict)
+        fitsfiles=glob.glob('*.fits')
+        for ff in fitsfiles: shutil.move(ff,v.DESTDIR)
+
+    #TODO: cleanup intermediate files
 
 ###################################################################################################
 #Utility Functions
@@ -394,6 +669,10 @@ def copy_corrected_data_to_data():
     Copy the contents of the CORRECTED_DATA column to the DATA column
     """
     ms.copycol(msname="$MS",fromcol="CORRECTED_DATA",tocol="DATA")
+
+def copy_corrected_data_to_data_all():
+    info("########## copying data to corrected data column step %i"%v.STEP)
+    pper("MS",copy_corrected_data_to_data)
 
 def copy_data_to_corrected_data():
     """
