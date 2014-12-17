@@ -92,7 +92,11 @@ if __name__ == '__main__':
     m[:ring_max]=h.pixelfunc.UNSEEN
 
     #replace nan values with zero
-    if opts.fill: m=n.nan_to_num(m)
+    if opts.fill:
+        minVal=opts.max
+        m+=minVal
+        m=n.nan_to_num(m)
+        m-=minVal
 
     fig=p.figure(1,figsize=(12,8))
 

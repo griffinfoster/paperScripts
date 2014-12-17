@@ -40,12 +40,10 @@ ms.DDID = 0
 ms.FIELD = 0
 
 ## destination directory for plots, images, etc.
-#v.DESTDIR_Template = '${OUTDIR>/}output-plots${-stage<STAGE}'
-#v.DESTDIR_Template = '${OUTDIR>/}swift-output-plots${-stage<STAGE}'
-#v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-output-plots${-stage<STAGE}'
-#v.DESTDIR_Template = '${OUTDIR>/}phase-output-plots${-stage<STAGE}'
-#v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-sun-output-plots${-stage<STAGE}'
-v.DESTDIR_Template = '${OUTDIR>/}phase-sun-output-plots${-stage<STAGE}'
+v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-sun-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-nobeam-natural-sun-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-sun-output-plots${-stage<STAGE}'
+#v.DESTDIR_Template = '${OUTDIR>/}phase-sun-natural-output-plots${-stage<STAGE}'
 ## base filename for these files
 v.OUTFILE_Template = '${DESTDIR>/}${MS:BASE}${_s<STEP}${_<LABEL}'
 
@@ -427,8 +425,10 @@ def image_domain_corrections_pipeline(goto_step=0):
 ###################################################################################################
 # HEALPIX skymap pipeline function
 def map_pipeline(goto_step=0):
+    #postFixStr='-stokes'
     #postFixStr='-stokes.beam'
-    postFixStr='-stokes.beam.abs'
+    postFixStr='-stokes.abs'
+    #postFixStr='-stokes.beam.abs'
 
     #convert FITS to healpix
     if goto_step <= 1.:
@@ -441,7 +441,8 @@ def map_pipeline(goto_step=0):
                 hpxfn=ff.split('.fits')[0]+'.s%s.hpx'%sid
                 #nside: 512 -> 7 arcmin res
                 #nside: 1024 -> 3.5 arcmin res
-                x.sh('%s/mk_map_mod.py %s -n --min_alt=30 -S %s --nside=512 -m %s'%(SCRIPTS_DIR,ff,sid,hpxfn))
+                #x.sh('%s/mk_map_mod.py %s -n --min_alt=30 -S %s --nside=512 -m %s'%(SCRIPTS_DIR,ff,sid,hpxfn))
+                x.sh('%s/mk_map_mod.py %s -n --min_alt=15 -S %s --nside=512 -m %s'%(SCRIPTS_DIR,ff,sid,hpxfn))
 
     #summed healpix map
     if goto_step <= 2.:
@@ -468,11 +469,11 @@ def gen_images_from_corrected_data(goto_step=1.):
             'size': '1024 1024',
             #'scale': 330./3600.,
             'scale': 0.11,
-            'niter': 1000,
+            'niter': 10,
             'threshold': 1.,
             'pol': 'xx,xy,yx,yy',
-            #'weight': 'natural',
-            'weight': 'briggs 0.0',
+            'weight': 'natural',
+            #'weight': 'briggs 0.0',
             'nwlayers':32,
             'channelrange': '%i %i'%(startChan,endChan),
             'channelsout': nsubbands,
@@ -501,7 +502,7 @@ def gen_images_from_corrected_data(goto_step=1.):
 
 ###################################################################################################
 #Self-cal from phase-only corrected gain, and sun removal
-def phase_precal_selfcal_pipeline(goto_step=0.):
+def phase_precal_selfcal_pipeline(goto_step=3.):
     useStep=1
     skipCalMSlist=[ 'zen.2455819.25927.uvcRREM',
                     'zen.2455819.27319.uvcRREM',
@@ -625,11 +626,12 @@ def phase_precal_selfcal_pipeline(goto_step=0.):
             'size': '1024 1024',
             #'scale': 330./3600.,
             'scale': 0.11,
-            'niter': 1000,
+            #'niter': 1000,
+            'niter': 1,
             'threshold': 100.,
             'pol': 'xx,xy,yx,yy',
-            #'weight': 'natural',
-            'weight': 'briggs 0.0',
+            'weight': 'natural',
+            #'weight': 'briggs 0.0',
             'nwlayers':32,
             'channelrange': '%i %i'%(startChan,endChan),
             'channelsout': nsubbands,
@@ -638,7 +640,8 @@ def phase_precal_selfcal_pipeline(goto_step=0.):
             x.sh('export LC_NUMERIC=en_GB.utf8')
             msBase=msFile.split('/')[-1].split('.MS')[0] 
             if msBase in skipCleanMSlist: wscleanDict['niter']=1
-            else: wscleanDict['niter']=1000
+            else: wscleanDict['niter']=1
+            #else: wscleanDict['niter']=1000
             info("########## making clean image step %i"%v.STEP)
             wscleanDict['name']=msBase+'_s%i'%v.STEP
             run_wsclean(msFile,wscleanDict)
